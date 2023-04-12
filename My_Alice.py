@@ -1,4 +1,3 @@
-import json
 import logging
 from random import choice
 
@@ -44,17 +43,20 @@ def start(response):
     Episode = 'Выбор начать игру или нет'
     return
 
+
 def choose(response):
     global Episode
     for agree in Agreement:
         if agree in request.json["request"]["command"]:
-            response["response"]["text"] = f'{choice(Continue)} {choice(Choose)}'
+            response["response"][
+                "text"] = f'{choice(Continue)} {choice(Choose)}'
             Episode = 'Выбор режима'
             return
     for disagree in Rejection:
         if disagree in request.json["request"]["command"]:
             return end(response)
-    return choose_mistake(response, count=3)
+    count = 3
+    return choose_mistake(response, count)
 
 
 def end(response):
@@ -72,7 +74,8 @@ def choose_mistake(response, count):
         response["response"]["text"] = choice(IncorrectStep1)
         for agree in Agreement:
             if agree in request.json["request"]["command"]:
-                response["response"]["text"] = f'{choice(Continue)} {choice(Choose)}'
+                response["response"][
+                    "text"] = f'{choice(Continue)} {choice(Choose)}'
             return
         for disagree in Rejection:
             if disagree in request.json["request"]["command"]:
@@ -82,14 +85,17 @@ def choose_mistake(response, count):
         response["response"]["text"] = choice(IncorrectStep2)
         for agree in Agreement:
             if agree in request.json["request"]["command"]:
-                response["response"]["text"] = f'{choice(Continue)} {choice(Choose)}'
-            return json.dumps(response)
+                response["response"][
+                    "text"] = f'{choice(Continue)} {choice(Choose)}'
+            return
         for disagree in Rejection:
             if disagree in request.json["request"]["command"]:
                 return end(response)
-        return choose_mistake(response, count - 1)
+        count -= 1
+        return choose_mistake(response, count)
     else:
         response["response"]["text"] = IncorrectStep3
+        return end(response)
 
 
 if __name__ == '__main__':
