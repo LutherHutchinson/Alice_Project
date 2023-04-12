@@ -1,8 +1,8 @@
 import json
 import logging
-from random import randrange
+from random import choice
 
-from flask import Flask, request
+from flask import Flask, request, jsonify
 
 from Key_Phrase import *
 
@@ -10,36 +10,47 @@ app = Flask(__name__)
 
 logging.basicConfig(level=logging.DEBUG)
 
+Episode = 'Начало'
+
 
 @app.route("/", methods=["POST"])
 def main():
-    logging.info(request.json)
-
+    logging.info(f'Request: {request.json!r}')
     response = {
-        "version": request.json["version"],
-        "session": request.json["session"],
-        "response": {
-            "end_session": False
+        'session': request.json['session'],
+        'version': request.json['version'],
+        'response': {
+            'end_session': False
         }
     }
+    handle_dialog(response, request.json)
+    logging.info(f'Response: {response!r}')
+    return jsonify(response)
 
-    if request.json["session"]["new"] == True:
-        return start(response)
+
+def handle_dialog(response, request):
+    global Episode
+    if request["session"]["new"]:
+        start(response)
+    elif Episode == 'Выбор начать игру или нет':
+        choose(response)
     else:
-        return end(response)
+        end(response)
 
 
 def start(response):
-    response["response"]["text"] = Greet_phrase[
-        randrange(0, len(Greet_phrase))]
-    return json.dumps(response), choose(response)
-
+    global Episode
+    response["response"]["text"] = choice(Greet_phrase)
+    Episode = 'Выбор начать игру или нет'
+    return
 
 def choose(response):
+    global Episode
     for agree in Agreement:
         if agree in request.json["request"]["command"]:
-            response["response"]["text"] = f'{Continue} {Choose}'
-            return json.dumps(response)
+            response["response"]["text"] = f'{choice(Continue)} {choice(Choose)}'
+            Episode = 'Выбор режима'
+            return
     for disagree in Rejection:
         if disagree in request.json["request"]["command"]:
             return end(response)
@@ -47,33 +58,31 @@ def choose(response):
 
 
 def end(response):
-    response["response"]["text"] = Bye[randrange(0, len(Bye))]
-    return json.dumps(response)
+    response["response"]["text"] = choice(Bye)
+    return
 
 
 def mistake(response):
-    response["response"]["text"] = Mistake[randrange(0, len(Mistake))]
-    return json.dumps(response)
+    response["response"]["text"] = choice(Mistake)
+    return
 
 
 def choose_mistake(response, count):
     if count == 3:
-        response["response"]["text"] = IncorrectStep1[
-            randrange(0, len(IncorrectStep1))]
+        response["response"]["text"] = choice(IncorrectStep1)
         for agree in Agreement:
             if agree in request.json["request"]["command"]:
-                response["response"]["text"] = f'{Continue} {Choose}'
-            return json.dumps(response)
+                response["response"]["text"] = f'{choice(Continue)} {choice(Choose)}'
+            return
         for disagree in Rejection:
             if disagree in request.json["request"]["command"]:
                 return end(response)
         return choose_mistake(response, count - 1)
     elif count == 2:
-        response["response"]["text"] = IncorrectStep2[
-            randrange(0, len(IncorrectStep2))]
+        response["response"]["text"] = choice(IncorrectStep2)
         for agree in Agreement:
             if agree in request.json["request"]["command"]:
-                response["response"]["text"] = f'{Continue} {Choose}'
+                response["response"]["text"] = f'{choice(Continue)} {choice(Choose)}'
             return json.dumps(response)
         for disagree in Rejection:
             if disagree in request.json["request"]["command"]:
@@ -81,7 +90,6 @@ def choose_mistake(response, count):
         return choose_mistake(response, count - 1)
     else:
         response["response"]["text"] = IncorrectStep3
-        return json.dumps(response)
 
 
 if __name__ == '__main__':
