@@ -30,6 +30,7 @@ Button_group = [Agree_Button, Disagree_Button,
 
 
 @app.route("/", methods=["POST"])
+# Главная функция, формирующая response
 def main():
     logging.info(f'Request: {request.json!r}')
     response = {
@@ -44,12 +45,13 @@ def main():
     return jsonify(response)
 
 
+# Функция, которая решает, какая функция будет вызвана следующей
 def handle_dialog(response, request):
     global Episode
     if request["session"]["new"]:
         start(response)
     elif count_choose_mem_word_mistake != 3:
-        choose_mem_word_sound_mistake(response)
+        choose_mem_word_mistake(response)
     elif count_choose_mistake != 3:
         choose_mistake(response)
     elif request["request"]["type"] == "SimpleUtterance":
@@ -57,6 +59,14 @@ def handle_dialog(response, request):
             secret_joke(response)
         elif Day_joke == request["request"]["command"]:
             daily_joke(response)
+        elif Episode == 'Выбор начать игру или нет':
+            choose(response)
+        elif Episode == 'Варианты режима':
+            mem_word_sound(response)
+        elif Episode == 'Выбор режима':
+            choose_mem_word(response)
+        elif Episode == 'Выход':
+            end(response)
         else:
             mistake(response)
     elif request["request"]["type"] == "ButtonPressed":
@@ -64,6 +74,12 @@ def handle_dialog(response, request):
             secret_joke(response)
         elif Day_Joke_Name_Button == request["request"]["payload"]["text"]:
             daily_joke(response)
+        elif End_Name_Button == request["request"]["payload"]["text"]:
+            end(response)
+        elif Support_Name_Button == request["request"]["payload"]["text"]:
+            support(response)
+        elif Ability_Name_Button == request["request"]["payload"]["text"]:
+            ability(response)
         else:
             mistake(response)
     elif Episode == 'Выбор начать игру или нет':
@@ -71,13 +87,14 @@ def handle_dialog(response, request):
     elif Episode == 'Варианты режима':
         mem_word_sound(response)
     elif Episode == 'Выбор режима':
-        choose_mem_word_sound(response)
+        choose_mem_word(response)
     elif Episode == 'Выход':
         end(response)
     else:
         mistake(response)
 
 
+# Функция, приветствующая пользователя и предоставляющая выбор о начале игры
 def start(response):
     global Episode, Button_group
     response["response"]["text"] = choice(Greet_phrase)
@@ -86,6 +103,7 @@ def start(response):
     return
 
 
+# Функция, обрабатывающая результат пользователя на первый вопрос о начале игры
 def choose(response):
     global Episode
     for agree in Agreement:
@@ -100,6 +118,7 @@ def choose(response):
     return choose_mistake(response)
 
 
+# Функция окончания игры
 def end(response):
     global Episode
     Episode = 'Начало'
@@ -107,11 +126,29 @@ def end(response):
     return
 
 
+# Функция отработки ошибок
 def mistake(response):
     response["response"]["text"] = choice(Mistake)
     return
 
 
+# Функция помощи
+def support(response):
+    global Button_group
+    response["response"]["text"] = Support
+    response["response"]["buttons"] = Button_group
+    return
+
+
+# Функция ЧТО ТЫ УМЕЕШЬ?
+def ability(response):
+    global Button_group
+    response["response"]["text"] = Ability
+    response["response"]["buttons"] = Button_group
+    return
+
+
+# Функция, которая предлагает выбор режима игры
 def mem_word_sound(response):
     global Episode, Button_group
     response["response"]["text"] = choice(Choose)
@@ -122,7 +159,8 @@ def mem_word_sound(response):
     return
 
 
-def choose_mem_word_sound(response):
+# Функция выбора режима игры
+def choose_mem_word(response):
     global Episode, Button_group
     for mem in Mem:
         if mem in request.json["request"]["command"]:
@@ -142,9 +180,10 @@ def choose_mem_word_sound(response):
                             Day_Joke_Button, Secret_Button, End_Button]
             response["response"]["buttons"] = Button_group
             return
-    return choose_mem_word_sound_mistake(response)
+    return choose_mem_word_mistake(response)
 
 
+# Функция, обрабатывающая ошибки при первом выборе начала игры
 def choose_mistake(response):
     global count_choose_mistake, Episode
     if count_choose_mistake == 3:
@@ -165,7 +204,8 @@ def choose_mistake(response):
         return
 
 
-def choose_mem_word_sound_mistake(response):
+# Функция, обрабатывающая ошибки при выборе режима игры
+def choose_mem_word_mistake(response):
     global count_choose_mem_word_mistake
     global Episode
     if count_choose_mem_word_mistake == 3:
@@ -186,6 +226,7 @@ def choose_mem_word_sound_mistake(response):
         return
 
 
+# Функция отправляющая рандомную шутку на английском языке
 def secret_joke(response):
     url = "https://v2.jokeapi.dev/joke/Any?blacklistFlags=nsfw,religious," \
           "political,racist,sexist,explicit"
@@ -209,6 +250,7 @@ def secret_joke(response):
         return mistake(response)
 
 
+# Функция, отправляющая рандомную шутку на русском языке
 def daily_joke(response):
     url = "https://v2.jokeapi.dev/joke/Any?blacklistFlags=nsfw,religious," \
           "political,racist,sexist,explicit"
