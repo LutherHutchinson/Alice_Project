@@ -1,12 +1,16 @@
 import logging
+import sqlite3
 from random import choice
 
 import requests
 from flask import Flask, request, jsonify
 from googletrans import Translator
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from All_Buttons import *
 from Bot_Key_Phrase import *
+from ORM_table import User
 from User_Key_Phrase import *
 
 app = Flask(__name__)
@@ -28,6 +32,17 @@ Button_group = [Agree_Button, Disagree_Button,
                 Day_Joke_Button, Secret_Button,
                 End_Button]
 
+# Переменные для навыка
+Picture_Id = ''
+Question = ''
+Answer = ''
+Description = ''
+
+# Подключение для ORM
+engine = create_engine('sqlite:///Alice_db.sqlite')
+session = sessionmaker(bind=engine)
+s = session()
+
 
 @app.route("/", methods=["POST"])
 # Главная функция, формирующая response
@@ -47,9 +62,9 @@ def main():
 
 # Функция, которая решает, какая функция будет вызвана следующей
 def handle_dialog(response, request):
-    global Episode
+    global Episode, count_choose_mem_word_mistake, count_choose_mistake
     if request["session"]["new"]:
-        start(response)
+        start(response, request)
     elif count_choose_mem_word_mistake != 3:
         choose_mem_word_mistake(response)
     elif count_choose_mistake != 3:
@@ -57,14 +72,53 @@ def handle_dialog(response, request):
     elif request["request"]["type"] == "SimpleUtterance":
         if Secret == request["request"]["command"]:
             secret_joke(response)
+        elif 'хватит' == request["request"]["command"]:
+            end(response)
         elif Day_joke == request["request"]["command"]:
             daily_joke(response)
         elif Episode == 'Выбор начать игру или нет':
             choose(response)
         elif Episode == 'Варианты режима':
-            mem_word_sound(response)
+            for mem in Mem:
+                if mem in request["request"]["command"]:
+                    count_choose_mem_word_mistake = 3
+                    new_mem(response)
+            for word in Word:
+                if word in request["request"]["command"]:
+                    count_choose_mem_word_mistake = 3
+                    new_word(response)
         elif Episode == 'Выбор режима':
             choose_mem_word(response)
+        elif Episode == 'Новое слово':
+            new_word(response)
+        elif Episode == 'Слово ответ':
+            if Answer in request["request"]["command"]:
+                correct_word(response, request)
+            else:
+                incorrect_word(response)
+        elif Episode == 'Мем ответ':
+            if Answer in request["request"]["command"]:
+                correct_mem(response, request)
+            else:
+                incorrect_mem(response)
+        elif Episode == 'Слово, идем дальше?':
+            for agree in Agreement:
+                if agree in request["request"]["command"]:
+                    new_word(response)
+            for disagree in Rejection:
+                if disagree in request["request"]["command"]:
+                    end(response)
+            else:
+                mistake(response)
+        elif Episode == 'Мем, идем дальше?':
+            for agree in Agreement:
+                if agree in request["request"]["command"]:
+                    new_mem(response)
+            for disagree in Rejection:
+                if disagree in request["request"]["command"]:
+                    end(response)
+            else:
+                mistake(response)
         elif Episode == 'Выход':
             end(response)
         else:
@@ -80,24 +134,56 @@ def handle_dialog(response, request):
             support(response)
         elif Ability_Name_Button == request["request"]["payload"]["text"]:
             ability(response)
+        elif Agree_Name_Button == request["request"]["payload"]["text"]:
+            if Episode == 'Выбор начать игру или нет':
+                count_choose_mistake = 3
+                mem_word(response)
+            elif Episode == 'Слово, идем дальше?':
+                new_word(response)
+            elif Episode == 'Мем, идем дальше?':
+                new_mem(response)
+            else:
+                mistake(response)
+        elif Disagree_Name_Button == request["request"]["payload"]["text"]:
+            count_choose_mistake = 3
+            end(response)
+        elif Another_Name_Button == request["request"]["payload"]["text"]:
+            if 'Мем' in Episode or 'мем' in Episode:
+                Episode = 'Новое слово'
+                new_word(response)
+            else:
+                Episode = 'Новый мем'
+                new_word(response)
+        elif Episode == 'Выбор режима':
+            if Mem_Name_Button == request["request"]["payload"]["text"]:
+                count_choose_mem_word_mistake = 3
+                new_mem(response)
+            elif Word_Name_Button == request["request"]["payload"]["text"]:
+                count_choose_mem_word_mistake = 3
+                new_word(response)
         else:
             mistake(response)
-    elif Episode == 'Выбор начать игру или нет':
-        choose(response)
-    elif Episode == 'Варианты режима':
-        mem_word_sound(response)
-    elif Episode == 'Выбор режима':
-        choose_mem_word(response)
-    elif Episode == 'Выход':
-        end(response)
     else:
         mistake(response)
 
 
 # Функция, приветствующая пользователя и предоставляющая выбор о начале игры
-def start(response):
-    global Episode, Button_group
-    response["response"]["text"] = choice(Greet_phrase)
+def start(response, request):
+    global Episode, Button_group, s
+    if s.query(User).filter(User.id_user):
+        pass
+    else:
+        user = User(id=request["session"]["user"]["user_id"], point_mem=0,
+                    point_word=0)
+        s.add(user)
+        s.commit()
+    Button_group = [Agree_Button, Disagree_Button,
+                    Support_Button, Ability_Button,
+                    Day_Joke_Button, Secret_Button,
+                    End_Button]
+    response["response"]["text"] = Greet_phrase
+    response["response"][
+        "tts"] = f'<speaker audio="alice-sounds-game-powerup-2.opus"> Привет, чемпион! Хочешь поиграть в "Мемный сленг"? Нужно угадать по фотографии или описанию загаданное "мемное" слово. Если понадобится помощь, то просто скажи "Помощь",  а если захочешь узнать, что я умею, спроси "Что ты умеешь?". Погнали?'
     response["response"]["buttons"] = Button_group
     Episode = 'Выбор начать игру или нет'
     return
@@ -123,6 +209,12 @@ def end(response):
     global Episode
     Episode = 'Начало'
     response["response"]["text"] = choice(Bye)
+    response["response"][
+        "tts"] = '<speaker audio="dialogs-upload/b0698619-d392-4049-831d-954551a74d66/62880414-c7e9-45bb-8d3c-aec37a204c24.opus"> До скорых встреч!'
+    response["response"]["card"] = {'type': 'BigImage',
+                                    'image_id': '997614/e54eab84a01b2c12008f',
+                                    'description': choice(Bye)}
+    response["response"]["end_session"] = True
     return
 
 
@@ -149,7 +241,7 @@ def ability(response):
 
 
 # Функция, которая предлагает выбор режима игры
-def mem_word_sound(response):
+def mem_word(response):
     global Episode, Button_group
     response["response"]["text"] = choice(Choose)
     Button_group = [Mem_Button, Word_Button, Support_Button, Ability_Button,
@@ -181,49 +273,6 @@ def choose_mem_word(response):
             response["response"]["buttons"] = Button_group
             return
     return choose_mem_word_mistake(response)
-
-
-# Функция, обрабатывающая ошибки при первом выборе начала игры
-def choose_mistake(response):
-    global count_choose_mistake, Episode
-    if count_choose_mistake == 3:
-        count_choose_mistake -= 1
-        response["response"]["text"] = choice(IncorrectStep1_1)
-        response["response"]["buttons"] = Button_group
-        return
-    elif count_choose_mistake == 2:
-        count_choose_mistake -= 1
-        response["response"]["text"] = choice(IncorrectStep2_1)
-        response["response"]["buttons"] = Button_group
-        return
-    else:
-        count_choose_mistake = 3
-        response["response"]["text"] = IncorrectStep3_1
-        response["response"]["end_session"] = True
-        Episode = 'Начало'
-        return
-
-
-# Функция, обрабатывающая ошибки при выборе режима игры
-def choose_mem_word_mistake(response):
-    global count_choose_mem_word_mistake
-    global Episode
-    if count_choose_mem_word_mistake == 3:
-        count_choose_mem_word_mistake -= 1
-        response["response"]["text"] = choice(IncorrectStep1_2)
-        response["response"]["buttons"] = Button_group
-        return
-    elif count_choose_mem_word_mistake == 2:
-        count_choose_mem_word_mistake -= 1
-        response["response"]["text"] = choice(IncorrectStep2_2)
-        response["response"]["buttons"] = Button_group
-        return
-    else:
-        count_choose_mem_word_mistake = 3
-        response["response"]["text"] = IncorrectStep3_2
-        response["response"]["end_session"] = True
-        Episode = 'Начало'
-        return
 
 
 # Функция отправляющая рандомную шутку на английском языке
@@ -278,6 +327,145 @@ def daily_joke(response):
         return
     else:
         return mistake(response)
+
+
+# Функция, обрабатывающая ошибки при первом выборе начала игры
+def choose_mistake(response):
+    global count_choose_mistake, Episode
+    if count_choose_mistake == 3:
+        count_choose_mistake -= 1
+        response["response"]["text"] = choice(IncorrectStep1_1)
+        response["response"]["buttons"] = Button_group
+        return
+    elif count_choose_mistake == 2:
+        count_choose_mistake -= 1
+        response["response"]["text"] = choice(IncorrectStep2_1)
+        response["response"]["buttons"] = Button_group
+        return
+    else:
+        count_choose_mistake = 3
+        response["response"]["text"] = IncorrectStep3_1
+        response["response"]["end_session"] = True
+        Episode = 'Начало'
+        return
+
+
+# Функция, обрабатывающая ошибки при выборе режима игры
+def choose_mem_word_mistake(response):
+    global count_choose_mem_word_mistake
+    global Episode
+    if count_choose_mem_word_mistake == 3:
+        count_choose_mem_word_mistake -= 1
+        response["response"]["text"] = choice(IncorrectStep1_2)
+        response["response"]["buttons"] = Button_group
+        return
+    elif count_choose_mem_word_mistake == 2:
+        count_choose_mem_word_mistake -= 1
+        response["response"]["text"] = choice(IncorrectStep2_2)
+        response["response"]["buttons"] = Button_group
+        return
+    else:
+        count_choose_mem_word_mistake = 3
+        response["response"]["text"] = IncorrectStep3_2
+        response["response"]["end_session"] = True
+        Episode = 'Начало'
+        return
+
+
+def new_word(response):
+    global Question, Answer, Description, Episode
+    con = sqlite3.connect("Alice_db.sqlite")
+    cur = con.cursor()
+    result = cur.execute(
+        """SELECT * FROM `word` ORDER BY RANDOM() LIMIT 1""").fetchall()
+    for data in result:
+        Question = data[0]
+        Answer = data[1]
+        Description = data[2]
+    con.close()
+    response["response"]["text"] = Question
+    Episode = 'Слово ответ'
+    return
+
+
+def correct_word(response, request):
+    global Description, Button_group, Episode, s
+    point = s.query(User).filter_by(
+        id=request["session"]["user"]["user_id"]).one()
+    if point:
+        point.point_word += 1
+        s.add(point)
+        s.commit()
+    response["response"][
+        "text"] = f'{choice(Praise)} А ты знал, что {Description} Погнали дальше?'
+    Button_group = [Agree_Button, Disagree_Button, Another_Button,
+                    Support_Button, Ability_Button, Day_Joke_Button,
+                    Secret_Button, End_Button]
+    response["response"]["buttons"] = Button_group
+    Episode = 'Слово, идем дальше?'
+    return
+
+
+def incorrect_word(response):
+    global Description, Button_group, Episode
+    response["response"][
+        "text"] = f'{choice(Condemnation)} Правильный ответ: {Answer}. А ты знал, что {Description} Погнали дальше?'
+    Button_group = [Agree_Button, Disagree_Button, Another_Button,
+                    Support_Button, Ability_Button, Day_Joke_Button,
+                    Secret_Button, End_Button]
+    response["response"]["buttons"] = Button_group
+    Episode = 'Слово, идем дальше?'
+    return
+
+
+def new_mem(response):
+    global Question, Answer, Description, Episode, Picture_Id
+    con = sqlite3.connect("Alice_db.sqlite")
+    cur = con.cursor()
+    result = cur.execute(
+        """SELECT * FROM `mem` ORDER BY RANDOM() LIMIT 1""").fetchall()
+    for data in result:
+        Picture_Id = data[0]
+        Question = data[1]
+        Answer = data[2]
+        Description = data[3]
+    con.close()
+    response["response"]["text"] = Question
+    response["response"]["card"] = {'type': 'BigImage',
+                                    'image_id': Picture_Id,
+                                    'description': Question}
+    Episode = 'Мем ответ'
+    return
+
+
+def correct_mem(response, request):
+    global Description, Button_group, Episode, s
+    point = s.query(User).filter_by(
+        id=request["session"]["user"]["user_id"]).one()
+    if point:
+        point.point_mem += 1
+        s.add(point)
+        s.commit()
+    response["response"][
+        "text"] = f'{choice(Praise)} А ты знал, что {Description} Погнали дальше?'
+    Button_group = [Agree_Button, Disagree_Button, Another_Button,
+                    Support_Button, Ability_Button, Day_Joke_Button,
+                    Secret_Button, End_Button]
+    response["response"]["buttons"] = Button_group
+    Episode = 'Мем, идем дальше?'
+    return
+
+
+def incorrect_mem(response):
+    global Description, Button_group, Episode
+    response["response"][
+        "text"] = f'{choice(Condemnation)} Правильный ответ: {Answer}. А ты знал, что {Description} Погнали дальше?'
+    Button_group = [Agree_Button, Disagree_Button, Another_Button,
+                    Support_Button, Ability_Button, Day_Joke_Button,
+                    Secret_Button, End_Button]
+    response["response"]["buttons"] = Button_group
+    Episode = 'Мем, идем дальше?'
+    return
 
 
 if __name__ == '__main__':

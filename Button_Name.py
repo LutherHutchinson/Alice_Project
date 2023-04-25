@@ -26,3 +26,6 @@ Day_Joke_Name_Button = 'Шутка дня'
 
 # Кнопка SECRET
 Secret_Name_Button = 'Secret joke'
+
+# Кнопка ДРУГОЙ РЕЖИМ
+Another_Name_Button = 'Другой режим'

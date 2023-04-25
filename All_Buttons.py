@@ -54,3 +54,9 @@ Secret_Button = {"title": Secret_Name_Button,
                  "payload": {
                      "text": Secret_Name_Button},
                  "hide": True}
+
+# Кнопка ДРУГОЙ РЕЖИМ
+Another_Button = {"title": Another_Name_Button,
+                 "payload": {
+                     "text": Another_Name_Button},
+                 "hide": True}
