@@ -5,12 +5,9 @@ from random import choice
 import requests
 from flask import Flask, request, jsonify
 from googletrans import Translator
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 from All_Buttons import *
 from Bot_Key_Phrase import *
-from ORM_table import User
 from User_Key_Phrase import *
 
 app = Flask(__name__)
@@ -29,19 +26,13 @@ count_choose_mem_word_mistake = 3
 # Классический набор кнопок
 Button_group = [Agree_Button, Disagree_Button,
                 Support_Button, Ability_Button,
-                Day_Joke_Button, Secret_Button,
-                End_Button]
+                Secret_Button, End_Button]
 
 # Переменные для навыка
 Picture_Id = ''
 Question = ''
 Answer = ''
 Description = ''
-
-# Подключение для ORM
-engine = create_engine('sqlite:///Alice_db.sqlite')
-session = sessionmaker(bind=engine)
-s = session()
 
 
 @app.route("/", methods=["POST"])
@@ -64,7 +55,7 @@ def main():
 def handle_dialog(response, request):
     global Episode, count_choose_mem_word_mistake, count_choose_mistake
     if request["session"]["new"]:
-        start(response, request)
+        start(response)
     elif count_choose_mem_word_mistake != 3:
         choose_mem_word_mistake(response)
     elif count_choose_mistake != 3:
@@ -74,8 +65,8 @@ def handle_dialog(response, request):
             secret_joke(response)
         elif 'хватит' == request["request"]["command"]:
             end(response)
-        elif Day_joke == request["request"]["command"]:
-            daily_joke(response)
+        # elif Day_joke == request["request"]["command"]:
+        #     daily_joke(response)
         elif Episode == 'Выбор начать игру или нет':
             choose(response)
         elif Episode == 'Варианты режима':
@@ -93,12 +84,12 @@ def handle_dialog(response, request):
             new_word(response)
         elif Episode == 'Слово ответ':
             if Answer in request["request"]["command"]:
-                correct_word(response, request)
+                correct_word(response)
             else:
                 incorrect_word(response)
         elif Episode == 'Мем ответ':
             if Answer in request["request"]["command"]:
-                correct_mem(response, request)
+                correct_mem(response)
             else:
                 incorrect_mem(response)
         elif Episode == 'Слово, идем дальше?':
@@ -126,8 +117,8 @@ def handle_dialog(response, request):
     elif request["request"]["type"] == "ButtonPressed":
         if Secret_Name_Button == request["request"]["payload"]["text"]:
             secret_joke(response)
-        elif Day_Joke_Name_Button == request["request"]["payload"]["text"]:
-            daily_joke(response)
+        # elif Day_Joke_Name_Button == request["request"]["payload"]["text"]:
+        #     daily_joke(response)
         elif End_Name_Button == request["request"]["payload"]["text"]:
             end(response)
         elif Support_Name_Button == request["request"]["payload"]["text"]:
@@ -168,19 +159,11 @@ def handle_dialog(response, request):
 
 
 # Функция, приветствующая пользователя и предоставляющая выбор о начале игры
-def start(response, request):
-    global Episode, Button_group, s
-    if s.query(User).filter(User.id_user):
-        pass
-    else:
-        user = User(id=request["session"]["user"]["user_id"], point_mem=0,
-                    point_word=0)
-        s.add(user)
-        s.commit()
+def start(response):
+    global Episode, Button_group
     Button_group = [Agree_Button, Disagree_Button,
                     Support_Button, Ability_Button,
-                    Day_Joke_Button, Secret_Button,
-                    End_Button]
+                    Secret_Button, End_Button]
     response["response"]["text"] = Greet_phrase
     response["response"][
         "tts"] = f'<speaker audio="alice-sounds-game-powerup-2.opus"> Привет, чемпион! Хочешь поиграть в "Мемный сленг"? Нужно угадать по фотографии или описанию загаданное "мемное" слово. Если понадобится помощь, то просто скажи "Помощь",  а если захочешь узнать, что я умею, спроси "Что ты умеешь?". Погнали?'
@@ -245,7 +228,7 @@ def mem_word(response):
     global Episode, Button_group
     response["response"]["text"] = choice(Choose)
     Button_group = [Mem_Button, Word_Button, Support_Button, Ability_Button,
-                    Day_Joke_Button, Secret_Button, End_Button]
+                    Secret_Button, End_Button]
     response["response"]["buttons"] = Button_group
     Episode = 'Выбор режима'
     return
@@ -260,7 +243,7 @@ def choose_mem_word(response):
                 "text"] = choice(Mem_phrase)
             Episode = 'Новый мем'
             Button_group = [Support_Button, Ability_Button,
-                            Day_Joke_Button, Secret_Button, End_Button]
+                            Secret_Button, End_Button]
             response["response"]["buttons"] = Button_group
             return
     for word in Word:
@@ -269,7 +252,7 @@ def choose_mem_word(response):
                 "text"] = choice(Word_phrase)
             Episode = 'Новое слово'
             Button_group = [Support_Button, Ability_Button,
-                            Day_Joke_Button, Secret_Button, End_Button]
+                            Secret_Button, End_Button]
             response["response"]["buttons"] = Button_group
             return
     return choose_mem_word_mistake(response)
@@ -300,33 +283,33 @@ def secret_joke(response):
 
 
 # Функция, отправляющая рандомную шутку на русском языке
-def daily_joke(response):
-    url = "https://v2.jokeapi.dev/joke/Any?blacklistFlags=nsfw,religious," \
-          "political,racist,sexist,explicit"
-    res = requests.get(url)
-    json_response = res.json()
-    ru_joke = list()
-    ru_joke_correct = ''
-    if 'setup' in json_response:
-        setup = json_response['setup']
-        deliver = json_response['delivery']
-        ru_joke.append(setup)
-        ru_joke.append(deliver)
-    else:
-        joke = json_response['joke']
-        ru_joke.append(joke)
-    translator = Translator()
-    ru_joke_tr = translator.translate(ru_joke, src='en', dest='ru')
-    for i in range(len(ru_joke_tr)):
-        if i != 0:
-            ru_joke_correct += ' '
-        ru_joke_correct += ru_joke_tr[i].text
-    if ru_joke_correct != '':
-        response["response"]["text"] = ru_joke_correct
-        response["response"]["buttons"] = Button_group
-        return
-    else:
-        return mistake(response)
+# def daily_joke(response):
+#     url = "https://v2.jokeapi.dev/joke/Any?blacklistFlags=nsfw,religious," \
+#           "political,racist,sexist,explicit"
+#     res = requests.get(url)
+#     json_response = res.json()
+#     ru_joke = list()
+#     ru_joke_correct = ''
+#     if 'setup' in json_response:
+#         setup = json_response['setup']
+#         deliver = json_response['delivery']
+#         ru_joke.append(setup)
+#         ru_joke.append(deliver)
+#     else:
+#         joke = json_response['joke']
+#         ru_joke.append(joke)
+#     translator = Translator()
+#     ru_joke_tr = translator.translate(ru_joke, src='en', dest='ru')
+#     for i in range(len(ru_joke_tr)):
+#         if i != 0:
+#             ru_joke_correct += ' '
+#         ru_joke_correct += ru_joke_tr[i].text
+#     if ru_joke_correct != '':
+#         response["response"]["text"] = ru_joke_correct
+#         response["response"]["buttons"] = Button_group
+#         return
+#     else:
+#         return mistake(response)
 
 
 # Функция, обрабатывающая ошибки при первом выборе начала игры
@@ -372,6 +355,8 @@ def choose_mem_word_mistake(response):
         return
 
 
+# Далее функции, содержащие в названии слово word
+# Они обеспечивают работу режима слова
 def new_word(response):
     global Question, Answer, Description, Episode
     con = sqlite3.connect("Alice_db.sqlite")
@@ -388,18 +373,12 @@ def new_word(response):
     return
 
 
-def correct_word(response, request):
-    global Description, Button_group, Episode, s
-    point = s.query(User).filter_by(
-        id=request["session"]["user"]["user_id"]).one()
-    if point:
-        point.point_word += 1
-        s.add(point)
-        s.commit()
+def correct_word(response):
+    global Description, Button_group, Episode
     response["response"][
         "text"] = f'{choice(Praise)} А ты знал, что {Description} Погнали дальше?'
     Button_group = [Agree_Button, Disagree_Button, Another_Button,
-                    Support_Button, Ability_Button, Day_Joke_Button,
+                    Support_Button, Ability_Button,
                     Secret_Button, End_Button]
     response["response"]["buttons"] = Button_group
     Episode = 'Слово, идем дальше?'
@@ -411,13 +390,15 @@ def incorrect_word(response):
     response["response"][
         "text"] = f'{choice(Condemnation)} Правильный ответ: {Answer}. А ты знал, что {Description} Погнали дальше?'
     Button_group = [Agree_Button, Disagree_Button, Another_Button,
-                    Support_Button, Ability_Button, Day_Joke_Button,
+                    Support_Button, Ability_Button,
                     Secret_Button, End_Button]
     response["response"]["buttons"] = Button_group
     Episode = 'Слово, идем дальше?'
     return
 
 
+# Далее функции, содержащие в названии слово mem
+# Они обеспечивают работу режима мем
 def new_mem(response):
     global Question, Answer, Description, Episode, Picture_Id
     con = sqlite3.connect("Alice_db.sqlite")
@@ -438,18 +419,12 @@ def new_mem(response):
     return
 
 
-def correct_mem(response, request):
-    global Description, Button_group, Episode, s
-    point = s.query(User).filter_by(
-        id=request["session"]["user"]["user_id"]).one()
-    if point:
-        point.point_mem += 1
-        s.add(point)
-        s.commit()
+def correct_mem(response):
+    global Description, Button_group, Episode
     response["response"][
         "text"] = f'{choice(Praise)} А ты знал, что {Description} Погнали дальше?'
     Button_group = [Agree_Button, Disagree_Button, Another_Button,
-                    Support_Button, Ability_Button, Day_Joke_Button,
+                    Support_Button, Ability_Button,
                     Secret_Button, End_Button]
     response["response"]["buttons"] = Button_group
     Episode = 'Мем, идем дальше?'
@@ -461,7 +436,7 @@ def incorrect_mem(response):
     response["response"][
         "text"] = f'{choice(Condemnation)} Правильный ответ: {Answer}. А ты знал, что {Description} Погнали дальше?'
     Button_group = [Agree_Button, Disagree_Button, Another_Button,
-                    Support_Button, Ability_Button, Day_Joke_Button,
+                    Support_Button, Ability_Button,
                     Secret_Button, End_Button]
     response["response"]["buttons"] = Button_group
     Episode = 'Мем, идем дальше?'
