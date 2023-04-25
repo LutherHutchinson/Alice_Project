@@ -4,7 +4,6 @@ from random import choice
 
 import requests
 from flask import Flask, request, jsonify
-from googletrans import Translator
 
 from All_Buttons import *
 from Bot_Key_Phrase import *
@@ -63,6 +62,10 @@ def handle_dialog(response, request):
     elif request["request"]["type"] == "SimpleUtterance":
         if Secret == request["request"]["command"]:
             secret_joke(response)
+        elif 'Какой твой любимый мем?' == request["request"]["command"]:
+            favourite_mem(response)
+        elif 'Какие мемы ты знаешь?' == request["request"]["command"]:
+            known_mem(response)
         elif 'хватит' == request["request"]["command"]:
             end(response)
         # elif Day_joke == request["request"]["command"]:
@@ -204,6 +207,25 @@ def end(response):
 # Функция отработки ошибок
 def mistake(response):
     response["response"]["text"] = choice(Mistake)
+    return
+
+
+# Функция Любимый мем
+def known_mem(response):
+    response["response"][
+        "text"] = 'Я знаю множество как забытых, так и только появившихся ' \
+                  'мемов. Интересно, кто больше углублен в мемологию, ты ' \
+                  'или я? Давай проверим!'
+    return
+
+
+# Функция Любимый мем
+def favourite_mem(response):
+    response["response"][
+        "text"] = 'Ох, я вообще люблю множество мемов, от аб' \
+                  'сурдных до дедовских. Но мой самый любимый - это ' \
+                  'мем с котиком хэппи! Интересно, может я знаю твоего ' \
+                  'фаворита среди мемов? Давай сыграем и проверим!'
     return
 
 
